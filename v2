@@ -5,6 +5,24 @@
 # Base Directory for root domains
 baseDir="/home/kali/Recon"
 
+
+remove_httpx() {
+    echo "[*] Removing httpx (non-ProjectDiscovery) from system paths..."
+
+    for path in /usr/bin/httpx /bin/httpx; do
+        if [ -f "$path" ]; then
+            sudo rm -f "$path" && echo "[+] Removed $path"
+        else
+            echo "[-] $path not found or already removed"
+        fi
+    done
+
+    echo "[*] Done."
+}
+
+# Implement main ?? 
+remove_httpx
+
 if [[ -d "$baseDir" ]]; then
     for dir in "$baseDir"/*/; do
         if [[ -f "${dir}/domains.txt" ]]; then
@@ -12,40 +30,40 @@ if [[ -d "$baseDir" ]]; then
             echo "Recon for $sector...."
 
             # Subdomain enumeration + resolution
-            #subfinder -dL "${dir}/domains.txt" \
-                #| alterx \
-                #| dnsx \
-                #| tee "${dir}/resolved_domains.txt"
+            subfinder -dL "${dir}/domains.txt" \
+                | alterx \
+                | dnsx \
+                | tee "${dir}/resolved_domains.txt"
 
             # DNS records
-           # dnsx -l "${dir}/resolved_domains.txt" \
-           #     -a -aaaa -cname -json -silent \
-            #    > "${dir}/dns_records.json"
+            dnsx -l "${dir}/resolved_domains.txt" \
+                -a -aaaa -cname -json -silent \
+                > "${dir}/dns_records.json"
 
             # HTTPx (tech detection)
-            #httpx -l "${dir}/resolved_domains.txt" \
-                #-title -status-code -content-type -tech-detect -t 75 \
-                #| tee "${dir}/httpx_techdetect.txt"
+            httpx -l "${dir}/resolved_domains.txt" \
+                -title -status-code -content-type -tech-detect -t 75 \
+                | tee "${dir}/httpx_techdetect.txt"
 
             # HTTPx probing (For Basic Output)
-            #httpx -l "${dir}/resolved_domains.txt" \
-                #| tee "${dir}/httpx_webservers.txt"
+            httpx -l "${dir}/resolved_domains.txt" \
+                | tee "${dir}/httpx_webservers.txt"
 
             # Crawling
-            #katana -list "${dir}/httpx_webservers.txt" \
-                #-jc -kf all \
-                #-o "${dir}/katana.txt"
+            katana -list "${dir}/httpx_webservers.txt" \
+                -jc -kf all \
+                -o "${dir}/katana.txt"
 
             # Port scanning
-            #smap -iL "${dir}/resolved_domains.txt" \
-                #| tee "${dir}/smap_openports.txt"
+            smap -iL "${dir}/resolved_domains.txt" \
+                | tee "${dir}/smap_openports.txt"
 
             # Historical URLs
-            gau --threads 20 < "${dir}/resolved_domains.txt" \
-                | tee "${dir}/gau.txt"
-
+            gau --threads 10 --timeout 10 < "${dir}/resolved_domains.txt" \
+                | tee "${dir}/url's.txt"
+            
             waybackurls < "${dir}/resolved_domains.txt" \
-                | tee "${dir}/wayback.txt"
+                | anew "${dir}/url's.txt"
 
             # Screenshots
             gowitness scan file \
@@ -53,6 +71,9 @@ if [[ -d "$baseDir" ]]; then
                 --threads 50 \
                 --write-db "${dir}/gowitness.db"
 
+            nuclei -l "${dir}/httpx_webservers.txt" \
+                -tags tech,panel,cms,framework,fingerprint \
+                | tee "${dir}/nuclei_tech.txt"
 
             # Nuclei DNS / takeover checks
             nuclei -l "${dir}/dns_records.json" \
@@ -68,6 +89,19 @@ if [[ -d "$baseDir" ]]; then
 else
     echo "$(date): Directory '$baseDir' does not exist."
 fi
+
+## Statistics
+input_count=$(wc -l < "${dir}domains.txt")
+echo "Total number of given domains: $input_count"
+
+resolved_count=$(wc -l < "${dir}resolved_domains.txt")
+echo "Total number of resolved domains: $resolved_count"
+echo "[+] Resolved domains saved to"
+
+webserver_count=$(wc -l < "${dir}httpx_webservers.txt")
+echo "Total number of webservers detected: $webserver_count"
+
+echo "Please visit the gowitness server located at http://127.0.0.1:7171/ to view gathered screenshots."
 
 # Start Gowitness Server at http://127.0.0.1:7171/
 gowitness report server
